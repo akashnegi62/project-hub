@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    tools {
-        nodejs 'NodeJS 20'
-    }
-
     environment {
         DOCKER_IMAGE = "deepacode/project-hub"
         DOCKER_TAG = "v1"
