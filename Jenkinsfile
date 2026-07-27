@@ -5,6 +5,9 @@ pipeline {
     environment {
         DOCKER_IMAGE = "deepacode/project-hub"
         DOCKER_TAG = "${BUILD_NUMBER}"
+
+        EC2_USER = "ubuntu"
+        EC2_HOST = "15.207.180.8"
     }
 
 
@@ -90,6 +93,53 @@ pipeline {
         }
 
 
+        stage('Deploy to EC2') {
+
+            steps {
+
+                sh '''
+                set -e
+
+                echo "Deploying application to EC2"
+
+
+                ssh -o StrictHostKeyChecking=no \
+                $EC2_USER@$EC2_HOST << EOF
+
+
+                echo "Pulling latest Docker image"
+
+                docker pull $DOCKER_IMAGE:latest
+
+
+                echo "Stopping old container"
+
+                docker stop project-hub || true
+
+
+                echo "Removing old container"
+
+                docker rm project-hub || true
+
+
+                echo "Starting new container"
+
+                docker run -d \
+                --name project-hub \
+                --restart always \
+                -p 3000:3000 \
+                $DOCKER_IMAGE:latest
+
+
+                echo "Deployment completed successfully"
+
+
+                EOF
+                '''
+            }
+        }
+
+
         stage('Cleanup') {
 
             steps {
@@ -105,7 +155,7 @@ pipeline {
     post {
 
         success {
-            echo "Build and Docker push completed successfully"
+            echo "Build, Docker push and EC2 deployment completed successfully"
         }
 
 
