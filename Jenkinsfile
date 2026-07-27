@@ -4,21 +4,17 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = "deepacode/project-hub"
-        DOCKER_TAG = "${BUILD_NUMBER}"
+        DOCKER_TAG   = "${BUILD_NUMBER}"
 
-        EC2_USER = "ubuntu"
         EC2_HOST = "15.207.180.8"
     }
-
 
     options {
         timeout(time: 30, unit: 'MINUTES')
         timestamps()
     }
 
-
     stages {
-
 
         stage('Checkout') {
             steps {
@@ -26,42 +22,37 @@ pipeline {
             }
         }
 
-
         stage('Install Dependencies') {
             steps {
                 sh '''
-                set -e
-                npm ci
+                    set -e
+                    npm ci
                 '''
             }
         }
-
 
         stage('Build Next.js') {
             steps {
                 sh '''
-                set -e
-                npm run build
+                    set -e
+                    npm run build
                 '''
             }
         }
-
 
         stage('Build Docker Image') {
             steps {
                 sh '''
-                set -e
+                    set -e
 
-                docker build \
-                -t $DOCKER_IMAGE:$DOCKER_TAG \
-                -t $DOCKER_IMAGE:latest .
+                    docker build \
+                      -t ${DOCKER_IMAGE}:${DOCKER_TAG} \
+                      -t ${DOCKER_IMAGE}:latest .
                 '''
             }
         }
 
-
         stage('Push Docker Image') {
-
             steps {
 
                 withCredentials([
@@ -72,99 +63,98 @@ pipeline {
                     )
                 ]) {
 
-
                     sh '''
-                    set -e
+                        set -e
 
-                    echo $DOCKER_PASS | docker login \
-                    -u $DOCKER_USER \
-                    --password-stdin
+                        echo "$DOCKER_PASS" | docker login \
+                          -u "$DOCKER_USER" \
+                          --password-stdin
 
+                        docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
+                        docker push ${DOCKER_IMAGE}:latest
 
-                    docker push $DOCKER_IMAGE:$DOCKER_TAG
-
-                    docker push $DOCKER_IMAGE:latest
-
-
-                    docker logout
+                        docker logout
                     '''
                 }
             }
         }
 
         stage('Test SSH Connection') {
+            steps {
 
-    steps {
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ec2-key',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
 
-        withCredentials([
-            sshUserPrivateKey(
-                credentialsId: 'ec2-key',
-                keyFileVariable: 'SSH_KEY',
-                usernameVariable: 'EC2_USER'
-            )
-        ]) {
+                    sh '''
+                        set -e
 
-            sh '''
-            set -e
+                        echo "Testing SSH Connection..."
 
-            echo "Testing SSH connection..."
+                        ssh -i "$SSH_KEY" \
+                          -o StrictHostKeyChecking=no \
+                          "$SSH_USER@$EC2_HOST" "hostname"
 
-            ssh -i "$SSH_KEY" \
-            -o StrictHostKeyChecking=no \
-            "$EC2_USER@$EC2_HOST" "hostname"
-
-            echo "SSH connection successful"
-            '''
-
+                        echo "SSH Connection Successful"
+                    '''
+                }
+            }
         }
-    }
-}
 
+        stage('Deploy to EC2') {
+            steps {
 
-       stage('Deploy to EC2') {
-           steps {
-            withCredentials([
-            sshUserPrivateKey(
-                credentialsId: 'ec2-key',
-                keyFileVariable: 'SSH_KEY',
-                usernameVariable: 'SSH_USER'
-            )]) {
-            sh '''
-                set -e
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ec2-key',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
 
-                ssh -i "$SSH_KEY" \
-                    -o StrictHostKeyChecking=no \
-                    "$SSH_USER@$EC2_HOST" <<EOF
-                docker pull ${DOCKER_IMAGE}:latest
-                docker stop project-hub || true
-                docker rm project-hub || true
-                docker run -d \
-                  --name project-hub \
-                  --restart always \
-                  -p 3000:3000 \
-                  ${DOCKER_IMAGE}:latest
-                 EOF
-                '''
+                    sh """
+                        set -e
+
+                        ssh -i "$SSH_KEY" \
+                        -o StrictHostKeyChecking=no \
+                        "$SSH_USER@$EC2_HOST" << 'EOF'
+
+sudo docker pull ${DOCKER_IMAGE}:latest
+
+sudo docker stop project-hub || true
+sudo docker rm project-hub || true
+
+sudo docker run -d \
+  --name project-hub \
+  --restart always \
+  -p 3000:3000 \
+  ${DOCKER_IMAGE}:latest
+
+sudo docker image prune -f
+
+EOF
+                    """
+                }
             }
         }
     }
-    }
-
 
     post {
 
         success {
-            echo "Build, Docker push and EC2 deployment completed successfully"
+            echo "Build, Push & Deployment Successful 🚀"
         }
-
 
         failure {
-            echo "Pipeline failed"
+            echo "Pipeline Failed ❌"
         }
 
-
         always {
-            echo "Pipeline finished"
+            echo "Pipeline Finished"
         }
     }
 }
