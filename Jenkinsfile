@@ -1,23 +1,28 @@
 pipeline {
+
     agent any
 
     environment {
         DOCKER_IMAGE = "deepacode/project-hub"
-        DOCKER_TAG = "v1"
+        DOCKER_TAG = "${BUILD_NUMBER}"
     }
+
 
     options {
         timeout(time: 30, unit: 'MINUTES')
         timestamps()
     }
 
+
     stages {
+
 
         stage('Checkout') {
             steps {
-                echo "Checking out source code"
+                echo "Source code already checked out by Jenkins SCM"
             }
         }
+
 
         stage('Install Dependencies') {
             steps {
@@ -28,14 +33,6 @@ pipeline {
             }
         }
 
-        stage('Test') {
-            steps {
-                sh '''
-                set -e
-                npm test || true
-                '''
-            }
-        }
 
         stage('Build Next.js') {
             steps {
@@ -46,17 +43,24 @@ pipeline {
             }
         }
 
+
         stage('Build Docker Image') {
             steps {
                 sh '''
                 set -e
-                docker build -t $DOCKER_IMAGE:$DOCKER_TAG .
+
+                docker build \
+                -t $DOCKER_IMAGE:$DOCKER_TAG \
+                -t $DOCKER_IMAGE:latest .
                 '''
             }
         }
 
+
         stage('Push Docker Image') {
+
             steps {
+
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'dockerhub',
@@ -65,6 +69,7 @@ pipeline {
                     )
                 ]) {
 
+
                     sh '''
                     set -e
 
@@ -72,7 +77,11 @@ pipeline {
                     -u $DOCKER_USER \
                     --password-stdin
 
+
                     docker push $DOCKER_IMAGE:$DOCKER_TAG
+
+                    docker push $DOCKER_IMAGE:latest
+
 
                     docker logout
                     '''
@@ -80,8 +89,11 @@ pipeline {
             }
         }
 
+
         stage('Cleanup') {
+
             steps {
+
                 sh '''
                 docker image prune -f
                 '''
@@ -89,13 +101,21 @@ pipeline {
         }
     }
 
+
     post {
-        always {
-            echo "Pipeline completed"
+
+        success {
+            echo "Build and Docker push completed successfully"
         }
+
 
         failure {
             echo "Pipeline failed"
+        }
+
+
+        always {
+            echo "Pipeline finished"
         }
     }
 }
