@@ -94,53 +94,38 @@ pipeline {
 
 
     stage('Deploy to EC2') {
+    steps {
+        sshagent(credentials: ['ec2-key']) {
+            sh '''
+                set -e
 
-        steps {
+                echo "Deploying application to EC2..."
 
-            sshagent(['ec2-key']) {
+                ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} <<EOF
+                set -e
 
-              sh '''
-              set -e
+                echo "Pulling latest Docker image..."
+                docker pull ${DOCKER_IMAGE}:latest
 
-              echo "Deploying application to EC2"
+                echo "Stopping old container..."
+                docker stop project-hub || true
 
+                echo "Removing old container..."
+                docker rm project-hub || true
 
-              ssh -o StrictHostKeyChecking=no \
-              $EC2_USER@$EC2_HOST << EOF
+                echo "Starting new container..."
+                docker run -d \
+                  --name project-hub \
+                  --restart always \
+                  -p 3000:3000 \
+                  ${DOCKER_IMAGE}:latest
 
-
-              echo "Pulling latest Docker image"
-
-              docker pull $DOCKER_IMAGE:latest
-
-
-              echo "Stopping old container"
-
-              docker stop project-hub || true
-
-
-              echo "Removing old container"
-
-              docker rm project-hub || true
-
-
-              echo "Starting new container"
-
-              docker run -d \
-              --name project-hub \
-              --restart always \
-              -p 3000:3000 \
-              $DOCKER_IMAGE:latest
-
-
-              echo "Deployment completed successfully"
-
-
-              EOF
-              '''
-            }
-       }
+                echo "Deployment completed successfully."
+EOF
+            '''
+        }
     }
+}
 
 
         stage('Cleanup') {
