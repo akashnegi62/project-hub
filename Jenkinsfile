@@ -92,51 +92,62 @@ pipeline {
             }
         }
 
+        stage('Test SSH Connection') {
 
-    stage('Deploy to EC2') {
     steps {
-        sshagent(credentials: ['ec2-key']) {
+
+        withCredentials([
+            sshUserPrivateKey(
+                credentialsId: 'ec2-key',
+                keyFileVariable: 'SSH_KEY',
+                usernameVariable: 'EC2_USER'
+            )
+        ]) {
+
             sh '''
-                set -e
+            set -e
 
-                echo "Deploying application to EC2..."
+            echo "Testing SSH connection..."
 
-                ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} <<EOF
-                set -e
+            ssh -i "$SSH_KEY" \
+            -o StrictHostKeyChecking=no \
+            "$EC2_USER@$EC2_HOST" "hostname"
 
-                echo "Pulling latest Docker image..."
-                docker pull ${DOCKER_IMAGE}:latest
-
-                echo "Stopping old container..."
-                docker stop project-hub || true
-
-                echo "Removing old container..."
-                docker rm project-hub || true
-
-                echo "Starting new container..."
-                docker run -d \
-                  --name project-hub \
-                  --restart always \
-                  -p 3000:3000 \
-                  ${DOCKER_IMAGE}:latest
-
-                echo "Deployment completed successfully."
-EOF
+            echo "SSH connection successful"
             '''
+
         }
     }
 }
 
 
-        stage('Cleanup') {
+       stage('Deploy to EC2') {
+           steps {
+            withCredentials([
+            sshUserPrivateKey(
+                credentialsId: 'ec2-key',
+                keyFileVariable: 'SSH_KEY',
+                usernameVariable: 'SSH_USER'
+            )]) {
+            sh '''
+                set -e
 
-            steps {
-
-                sh '''
-                docker image prune -f
+                ssh -i "$SSH_KEY" \
+                    -o StrictHostKeyChecking=no \
+                    "$SSH_USER@$EC2_HOST" <<EOF
+                docker pull ${DOCKER_IMAGE}:latest
+                docker stop project-hub || true
+                docker rm project-hub || true
+                docker run -d \
+                  --name project-hub \
+                  --restart always \
+                  -p 3000:3000 \
+                  ${DOCKER_IMAGE}:latest
+                 EOF
                 '''
             }
         }
+    }
     }
 
 
