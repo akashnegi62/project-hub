@@ -27,6 +27,7 @@ const dropdownCategories: DropdownCategory[] = [
       { id: "java", label: "Java" },
       { id: "node", label: "Node" },
       { id: "cpp", label: "C++" },
+      { id: "cpp", label: "C" },
     ],
   },
   {
