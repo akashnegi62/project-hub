@@ -89,7 +89,7 @@ export default function Sidebar() {
           P
         </div>
         <span className="text-h3 font-semibold text-text-primary">
-          Project Hub
+          Project New
         </span>
       </div>
 
